@@ -151,7 +151,7 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   Map<double, double> _generateStops() {
     final flexes = widget.tabs.map((e) => e.flex).toList();
     final flexesSum = flexes.reduce((a, b) => a + b);
-    final step = (_controller!.length) / flexesSum;
+    final step = (_controller!.length - 1) / (flexesSum - 1);
     Map<double, double> stops = {};
     for (int i = 1; i < _controller!.length - 1; i++) {
       stops[i.toDouble()] = flexes.take(i).reduce((a, b) => a + b) * step;
@@ -200,11 +200,6 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
       return 0;
     }
     final x = value / (_controller!.length - 1) * _maxOffset;
-    log(x.toStringAsFixed(2) +
-        ' ' +
-        value.toStringAsFixed(2) +
-        ' ' +
-        _maxOffset.toStringAsFixed(2));
     return x;
   }
 
