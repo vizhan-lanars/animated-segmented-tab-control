@@ -13,7 +13,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: DefaultTabController(
-        length: 3,
+        length: 4,
         child: Scaffold(
           body: SafeArea(
             child: Stack(
@@ -31,6 +31,7 @@ class MyApp extends StatelessWidget {
                     textStyle: Theme.of(context).textTheme.caption,
                     tabs: [
                       CustomizableTab(
+                        flex: 2,
                         label: 'ACCOUNT',
                         backgroundColor: Colors.blueGrey,
                         color: Colors.blueGrey.shade200,
@@ -43,6 +44,7 @@ class MyApp extends StatelessWidget {
                         textColor: Colors.black.withOpacity(0.5),
                       ),
                       const CustomizableTab(label: 'NEW'),
+                      const CustomizableTab(label: 'NEW2'),
                     ],
                   ),
                 ),
@@ -64,6 +66,11 @@ class MyApp extends StatelessWidget {
                         alignment: Alignment.center,
                         color: Colors.blue.withOpacity(0.5),
                         child: const Text('3'),
+                      ),
+                      Container(
+                        alignment: Alignment.center,
+                        color: Colors.blue.withOpacity(0.5),
+                        child: const Text('4'),
                       ),
                     ],
                   ),

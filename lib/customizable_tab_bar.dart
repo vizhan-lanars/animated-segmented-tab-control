@@ -1,8 +1,11 @@
 library customizable_tab_bar;
 
+import 'package:collection/collection.dart';
+import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
+import 'utils/animation_converter.dart';
 import 'utils/custom_clippers.dart';
 
 part 'customizable_tab.dart';
@@ -56,6 +59,7 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   Alignment _currentIndicatorAlignment = Alignment.centerLeft;
   late AnimationController _internalAnimationController;
   late Animation<Alignment> _internalAnimation;
+  late AnimationConverter _converter;
   TabController? _controller;
 
   @override
@@ -76,6 +80,7 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _updateTabController();
+    _updateConverter();
   }
 
   @override
@@ -83,6 +88,9 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
       _updateTabController();
+    }
+    if (!const ListEquality().equals(widget.tabs, oldWidget.tabs)) {
+      _updateConverter();
     }
   }
 
@@ -125,7 +133,29 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
 
   void _handleTabControllerAnimationTick() {
     final currentValue = _controller!.animation!.value;
-    _animateIndicatorTo(_animationValueToAlignment(currentValue));
+    _animateIndicatorTo(
+        _animationValueToAlignment(_converter.convertValue(currentValue)));
+  }
+
+  void _updateConverter() {
+    _converter = AnimationConverter(
+      animation: _controller!.animation!,
+      minAnimationValue: 0,
+      maxAnimationValue: _controller!.length - 1,
+      stops: _generateStops(),
+    );
+  }
+
+  Map<double, double> _generateStops() {
+    final flexes = widget.tabs.map((e) => e.flex).toList();
+    final flexesSum = flexes.reduce((a, b) => a + b);
+    final step = (_controller!.length - 1) / flexesSum;
+    Map<double, double> stops = {};
+    for (int i = 1; i < _controller!.length - 1; i++) {
+      stops[i.toDouble()] =
+          flexes.take(i).reduce((a, b) => a + b) * step + flexes[i] * step / 2;
+    }
+    return stops;
   }
 
   void _updateControllerIndex() {
@@ -213,7 +243,8 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
       child: LayoutBuilder(builder: (context, constraints) {
         final indicatorWidth =
             (constraints.maxWidth - widget.indicatorPadding.horizontal) /
-                _controller!.length;
+                widget.tabs.map((e) => e.flex).reduce((a, b) => a + b) *
+                currentTab.flex;
 
         return ClipRRect(
           borderRadius: BorderRadius.all(widget.radius),
@@ -270,31 +301,39 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
                 _SqueezeAnimated(
                   currentTilePadding: _currentTilePadding,
                   squeezeDuration: widget.squeezeDuration,
-                  builder: (squeezePadding) => ClipPath(
-                    clipper: RRectRevealClipper(
-                      radius: widget.radius,
-                      size: Size(
-                        indicatorWidth,
-                        widget.height -
-                            widget.indicatorPadding.vertical -
-                            squeezePadding.vertical,
-                      ),
-                      offset: Offset(
-                        _convertXToCoef(_currentIndicatorAlignment) *
-                            (constraints.maxWidth - indicatorWidth),
-                        0,
-                      ),
+                  builder: (squeezePadding) => TweenAnimationBuilder<double>(
+                    duration: kTabScrollDuration,
+                    curve: Curves.ease,
+                    tween: Tween<double>(
+                      begin: indicatorWidth,
+                      end: indicatorWidth,
                     ),
-                    child: IgnorePointer(
-                      child: _Labels(
+                    builder: (context, value, _) => ClipPath(
+                      clipper: RRectRevealClipper(
                         radius: widget.radius,
-                        splashColor: widget.splashColor,
-                        splashHighlightColor: widget.splashHighlightColor,
-                        availableSpace: constraints.maxWidth,
-                        tabs: widget.tabs,
-                        currentIndex: _internalIndex,
-                        textStyle: textStyle.copyWith(
-                          color: selectedTabTextColor,
+                        size: Size(
+                          value,
+                          widget.height -
+                              widget.indicatorPadding.vertical -
+                              squeezePadding.vertical,
+                        ),
+                        offset: Offset(
+                          _convertXToCoef(_currentIndicatorAlignment) *
+                              (constraints.maxWidth - indicatorWidth),
+                          0,
+                        ),
+                      ),
+                      child: IgnorePointer(
+                        child: _Labels(
+                          radius: widget.radius,
+                          splashColor: widget.splashColor,
+                          splashHighlightColor: widget.splashHighlightColor,
+                          availableSpace: constraints.maxWidth,
+                          tabs: widget.tabs,
+                          currentIndex: _internalIndex,
+                          textStyle: textStyle.copyWith(
+                            color: selectedTabTextColor,
+                          ),
                         ),
                       ),
                     ),
@@ -387,10 +426,10 @@ class _Labels extends StatelessWidget {
   final Color? splashColor;
   final Color? splashHighlightColor;
 
-  late final width = availableSpace / tabs.length;
-
   @override
   Widget build(BuildContext context) {
+    final step =
+        availableSpace / tabs.map((e) => e.flex).reduce((a, b) => a + b);
     return Center(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -399,7 +438,7 @@ class _Labels extends StatelessWidget {
           (index) {
             final tab = tabs[index];
             return SizedBox(
-              width: width,
+              width: step * tab.flex,
               child: InkWell(
                 splashColor: tab.splashColor ?? splashColor,
                 highlightColor:
