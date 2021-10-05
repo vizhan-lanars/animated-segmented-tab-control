@@ -1,5 +1,7 @@
 library customizable_tab_bar;
 
+import 'dart:developer';
+
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +24,6 @@ class CustomizableTabBar extends StatefulWidget implements PreferredSizeWidget {
     this.selectedTabTextColor,
     this.indicatorColor,
     this.squeezeIntensity = 1,
-    this.squeezeDuration = const Duration(milliseconds: 500),
     this.indicatorPadding = EdgeInsets.zero,
     this.tabPadding = const EdgeInsets.symmetric(horizontal: 8),
     this.radius = const Radius.circular(20),
@@ -39,7 +40,6 @@ class CustomizableTabBar extends StatefulWidget implements PreferredSizeWidget {
   final Color? selectedTabTextColor;
   final Color? indicatorColor;
   final double squeezeIntensity;
-  final Duration squeezeDuration;
   final EdgeInsets indicatorPadding;
   final EdgeInsets tabPadding;
   final Radius radius;
@@ -57,10 +57,12 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
     with SingleTickerProviderStateMixin {
   EdgeInsets _currentTilePadding = EdgeInsets.zero;
   Alignment _currentIndicatorAlignment = Alignment.centerLeft;
+  double _offset = 0;
   late AnimationController _internalAnimationController;
-  late Animation<Alignment> _internalAnimation;
+  late Animation<double> _internalAnimation;
   late AnimationConverter _converter;
   TabController? _controller;
+  double _maxOffset = 1;
 
   @override
   void initState() {
@@ -127,14 +129,14 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
 
   void _handleInternalAnimationTick() {
     setState(() {
-      _currentIndicatorAlignment = _internalAnimation.value;
+      _offset = _internalAnimation.value;
     });
   }
 
   void _handleTabControllerAnimationTick() {
     final currentValue = _controller!.animation!.value;
     _animateIndicatorTo(
-        _animationValueToAlignment(_converter.convertValue(currentValue)));
+        _animationValueToOffset(_converter.convertValue(currentValue)));
   }
 
   void _updateConverter() {
@@ -149,11 +151,10 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   Map<double, double> _generateStops() {
     final flexes = widget.tabs.map((e) => e.flex).toList();
     final flexesSum = flexes.reduce((a, b) => a + b);
-    final step = (_controller!.length - 1) / flexesSum;
+    final step = (_controller!.length) / flexesSum;
     Map<double, double> stops = {};
     for (int i = 1; i < _controller!.length - 1; i++) {
-      stops[i.toDouble()] =
-          flexes.take(i).reduce((a, b) => a + b) * step + flexes[i] * step / 2;
+      stops[i.toDouble()] = flexes.take(i).reduce((a, b) => a + b) * step;
     }
     return stops;
   }
@@ -165,9 +166,9 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   TickerFuture _animateIndicatorToNearest(
       Offset pixelsPerSecond, double width) {
     final nearest = _internalIndex;
-    final target = _animationValueToAlignment(nearest.toDouble());
-    _internalAnimation = _internalAnimationController.drive(AlignmentTween(
-      begin: _currentIndicatorAlignment,
+    final target = _animationValueToOffset(nearest.toDouble());
+    _internalAnimation = _internalAnimationController.drive(Tween<double>(
+      begin: _offset,
       end: target,
     ));
     final unitsPerSecondX = pixelsPerSecond.dx / width;
@@ -185,32 +186,32 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
     return _internalAnimationController.animateWith(simulation);
   }
 
-  TickerFuture _animateIndicatorTo(Alignment target) {
-    _internalAnimation = _internalAnimationController.drive(AlignmentTween(
-      begin: _currentIndicatorAlignment,
+  TickerFuture _animateIndicatorTo(double target) {
+    _internalAnimation = _internalAnimationController.drive(Tween<double>(
+      begin: _offset,
       end: target,
     ));
 
     return _internalAnimationController.fling();
   }
 
-  Alignment _animationValueToAlignment(double? value) {
+  double _animationValueToOffset(double? value) {
     if (value == null) {
-      return const Alignment(-1, 0);
+      return 0;
     }
-    final x = value / (_controller!.length - 1) * 2 - 1;
-    return Alignment(x, 0);
+    final x = value / (_controller!.length - 1) * _maxOffset;
+    log(x.toStringAsFixed(2) +
+        ' ' +
+        value.toStringAsFixed(2) +
+        ' ' +
+        _maxOffset.toStringAsFixed(2));
+    return x;
   }
 
-  int get _internalIndex => _alignmentToIndex(_currentIndicatorAlignment);
-  int _alignmentToIndex(Alignment alignment) {
-    final currentPosition =
-        (_controller!.length - 1) * _convertXToCoef(alignment);
+  int get _internalIndex => _offsetToIndex(_offset);
+  int _offsetToIndex(double alignment) {
+    final currentPosition = _offset / _maxOffset * (_controller!.length - 1);
     return currentPosition.round();
-  }
-
-  double _convertXToCoef(Alignment alignment) {
-    return (alignment.x + 1) / 2;
   }
 
   @override
@@ -246,6 +247,8 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
                 widget.tabs.map((e) => e.flex).reduce((a, b) => a + b) *
                 currentTab.flex;
 
+        _maxOffset = constraints.maxWidth - indicatorWidth;
+
         return ClipRRect(
           borderRadius: BorderRadius.all(widget.radius),
           child: SizedBox(
@@ -275,24 +278,27 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
                     ),
                   ),
                 ),
-                Align(
-                  alignment: _currentIndicatorAlignment,
+                Positioned(
+                  left: _offset,
                   child: GestureDetector(
                     onPanDown: _onPanDown(),
                     onPanUpdate: _onPanUpdate(constraints),
                     onPanEnd: _onPanEnd(constraints),
                     child: _SqueezeAnimated(
                       currentTilePadding: _currentTilePadding,
-                      squeezeDuration: widget.squeezeDuration,
-                      builder: (_) => AnimatedContainer(
-                        duration: kTabScrollDuration,
-                        curve: Curves.ease,
-                        width: indicatorWidth,
-                        height:
-                            widget.height - widget.indicatorPadding.vertical,
-                        decoration: BoxDecoration(
-                          color: indicatorColor,
-                          borderRadius: BorderRadius.all(widget.radius),
+                      builder: (additionalPadding) => Padding(
+                        padding: EdgeInsets.only(top: additionalPadding.top),
+                        child: AnimatedContainer(
+                          duration: kTabScrollDuration,
+                          curve: Curves.ease,
+                          width: indicatorWidth,
+                          height: widget.height -
+                              widget.indicatorPadding.vertical -
+                              additionalPadding.vertical,
+                          decoration: BoxDecoration(
+                            color: indicatorColor,
+                            borderRadius: BorderRadius.all(widget.radius),
+                          ),
                         ),
                       ),
                     ),
@@ -300,7 +306,6 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
                 ),
                 _SqueezeAnimated(
                   currentTilePadding: _currentTilePadding,
-                  squeezeDuration: widget.squeezeDuration,
                   builder: (squeezePadding) => TweenAnimationBuilder<double>(
                     duration: kTabScrollDuration,
                     curve: Curves.ease,
@@ -317,11 +322,7 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
                               widget.indicatorPadding.vertical -
                               squeezePadding.vertical,
                         ),
-                        offset: Offset(
-                          _convertXToCoef(_currentIndicatorAlignment) *
-                              (constraints.maxWidth - indicatorWidth),
-                          0,
-                        ),
+                        offset: Offset(_offset, 0),
                       ),
                       child: IgnorePointer(
                         child: _Labels(
@@ -470,26 +471,21 @@ class _SqueezeAnimated extends StatelessWidget {
     Key? key,
     required this.builder,
     required this.currentTilePadding,
-    this.squeezeDuration = const Duration(milliseconds: 500),
   }) : super(key: key);
 
   final Widget Function(EdgeInsets) builder;
   final EdgeInsets currentTilePadding;
-  final Duration squeezeDuration;
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<EdgeInsets>(
-      curve: Curves.decelerate,
+      curve: Curves.ease,
       tween: Tween(
         begin: EdgeInsets.zero,
         end: currentTilePadding,
       ),
-      duration: squeezeDuration,
-      builder: (context, padding, _) => Padding(
-        padding: padding,
-        child: builder.call(padding),
-      ),
+      duration: kTabScrollDuration,
+      builder: (context, padding, _) => builder.call(padding),
     );
   }
 }
