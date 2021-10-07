@@ -37,7 +37,9 @@ class AnimationConverter {
     return ranges;
   }
 
-  double convertValue(double value) {
+  double call(double value) => convert(value);
+
+  double convert(double value) {
     final sourceRangeIndex = _findInRanges(value, _sourceRanges);
     if (sourceRangeIndex == null) {
       throw RangeError(
@@ -49,7 +51,25 @@ class AnimationConverter {
         stopRange.from;
   }
 
+  double reverse(double value) {
+    final stopRangeIndex = _findInRanges(value, _stopsRanges);
+    if (stopRangeIndex == null) {
+      throw RangeError(
+          'Animation value out of range. Available range is $minAnimationValue..$maxAnimationValue');
+    }
+    final sourceRange = _sourceRanges[stopRangeIndex];
+    return (value - _stopsRanges[stopRangeIndex].from) *
+            (1 - _speedCoefs[stopRangeIndex]) +
+        sourceRange.from;
+  }
+
   int? _findInRanges(double value, List<DoubleRange> ranges) {
+    if (value < ranges.first.from) {
+      return 0;
+    }
+    if (value > ranges.last.to) {
+      return ranges.length - 2;
+    }
     for (int i = 0; i < ranges.length; i++) {
       if (ranges[i].contains(value)) {
         return i;

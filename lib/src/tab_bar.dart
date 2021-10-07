@@ -50,7 +50,6 @@ class CustomizableTabBar extends StatefulWidget implements PreferredSizeWidget {
 class _CustomizableTabBarState extends State<CustomizableTabBar>
     with SingleTickerProviderStateMixin {
   EdgeInsets _currentTilePadding = EdgeInsets.zero;
-  Alignment _currentIndicatorAlignment = Alignment.centerLeft;
   double _offset = 0;
   late AnimationController _internalAnimationController;
   late Animation<double> _internalAnimation;
@@ -67,7 +66,8 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   @override
   void initState() {
     super.initState();
-    _internalAnimationController = AnimationController(vsync: this);
+    _internalAnimationController =
+        AnimationController(vsync: this, duration: kTabScrollDuration);
     _internalAnimationController.addListener(_handleInternalAnimationTick);
   }
 
@@ -135,8 +135,7 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
 
   void _handleTabControllerAnimationTick() {
     final currentValue = _controller!.animation!.value;
-    _animateIndicatorTo(
-        _animationValueToOffset(_converter.convertValue(currentValue)));
+    _animateIndicatorTo(_animationValueToOffset(_converter(currentValue)));
   }
 
   void _updateConverter() {
@@ -160,13 +159,13 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   }
 
   void _updateControllerIndex() {
-    _controller!.index = _internalIndex;
+    _controller!.index = _nearestIndex().round();
   }
 
   TickerFuture _animateIndicatorToNearest(
       Offset pixelsPerSecond, double width) {
-    final nearest = _internalIndex;
-    final target = _animationValueToOffset(nearest.toDouble());
+    final nearest = _nearestIndex();
+    final target = _animationValueToOffset(nearest);
     _internalAnimation = _internalAnimationController.drive(Tween<double>(
       begin: _offset,
       end: target,
@@ -184,6 +183,14 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
     final simulation = SpringSimulation(spring, 0, 1, -unitVelocity);
 
     return _internalAnimationController.animateWith(simulation);
+  }
+
+  double _nearestIndex() {
+    return _converter(((_offset + _indicatorWidth / 2) /
+            _availableSpace *
+            (_controller!.length - 1))
+        .round()
+        .toDouble());
   }
 
   TickerFuture _animateIndicatorTo(double target) {
@@ -281,10 +288,10 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
                       child: AnimatedContainer(
                         duration: kTabScrollDuration,
                         curve: Curves.ease,
-                        width: _indicatorWidth,
                         height: widget.height -
                             widget.indicatorPadding.vertical -
                             additionalPadding.vertical,
+                        width: _indicatorWidth,
                         decoration: BoxDecoration(
                           color: indicatorColor,
                           borderRadius: BorderRadius.all(widget.radius),
@@ -365,15 +372,9 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
       return null;
     }
     return (details) {
-      double x = _currentIndicatorAlignment.x +
-          details.delta.dx / (constraints.maxWidth / 2);
-      if (x < -1) {
-        x = -1;
-      } else if (x > 1) {
-        x = 1;
-      }
+      double x = _offset + details.delta.dx;
       setState(() {
-        _currentIndicatorAlignment = Alignment(x, 0);
+        _offset = x;
       });
     };
   }
