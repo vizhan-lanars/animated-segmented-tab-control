@@ -55,4 +55,9 @@ class AnimationConverter {
       }
     }
   }
+
+  @override
+  String toString() {
+    return 'AnimationConverter{animation: $animation, minAnimationValue: $minAnimationValue, maxAnimationValue: $maxAnimationValue, stops: $stops}';
+  }
 }

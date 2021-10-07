@@ -1,7 +1,5 @@
 library customizable_tab_bar;
 
-import 'dart:developer';
-
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
@@ -63,6 +61,12 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
   late AnimationConverter _converter;
   TabController? _controller;
   double _maxOffset = 1;
+  double _availableSpace = 1;
+  double _indicatorWidth = 0;
+
+  List<int> get _flexes => widget.tabs.map((e) => e.flex).toList();
+
+  int get _flexesSum => _flexes.reduce((a, b) => a + b);
 
   @override
   void initState() {
@@ -203,11 +207,7 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
     return x;
   }
 
-  int get _internalIndex => _offsetToIndex(_offset);
-  int _offsetToIndex(double alignment) {
-    final currentPosition = _offset / _maxOffset * (_controller!.length - 1);
-    return currentPosition.round();
-  }
+  int get _internalIndex => _controller!.animation!.value.round();
 
   @override
   Widget build(BuildContext context) {
@@ -234,113 +234,111 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
 
     final borderRadius = BorderRadius.all(widget.radius);
 
-    return DefaultTextStyle(
-      style: widget.textStyle ?? DefaultTextStyle.of(context).style,
-      child: LayoutBuilder(builder: (context, constraints) {
-        final indicatorWidth =
-            (constraints.maxWidth - widget.indicatorPadding.horizontal) /
-                widget.tabs.map((e) => e.flex).reduce((a, b) => a + b) *
-                currentTab.flex;
+    return LayoutBuilder(builder: (context, constraints) {
+      _availableSpace =
+          constraints.maxWidth - widget.indicatorPadding.horizontal;
 
-        _maxOffset = constraints.maxWidth - indicatorWidth;
+      _indicatorWidth = _availableSpace / _flexesSum * currentTab.flex;
 
-        return ClipRRect(
-          borderRadius: BorderRadius.all(widget.radius),
-          child: SizedBox(
-            height: widget.height,
-            child: Stack(
-              children: [
-                AnimatedContainer(
+      final lastTabWidth = _availableSpace / _flexesSum * widget.tabs.last.flex;
+      _maxOffset = _availableSpace - lastTabWidth;
+
+      return ClipRRect(
+        borderRadius: BorderRadius.all(widget.radius),
+        child: SizedBox(
+          height: widget.height,
+          child: Stack(
+            children: [
+              AnimatedContainer(
+                duration: kTabScrollDuration,
+                curve: Curves.ease,
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: borderRadius,
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: _Labels(
+                    radius: widget.radius,
+                    splashColor: widget.splashColor,
+                    splashHighlightColor: widget.splashHighlightColor,
+                    callbackBuilder: _onTabTap(),
+                    availableSpace: constraints.maxWidth,
+                    tabs: widget.tabs,
+                    currentIndex: _internalIndex,
+                    textStyle: textStyle.copyWith(
+                      color: tabTextColor,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: _offset,
+                child: GestureDetector(
+                  onPanDown: _onPanDown(),
+                  onPanUpdate: _onPanUpdate(constraints),
+                  onPanEnd: _onPanEnd(constraints),
+                  child: _SqueezeAnimated(
+                    currentTilePadding: _currentTilePadding,
+                    builder: (additionalPadding) => Padding(
+                      padding: EdgeInsets.only(top: additionalPadding.top),
+                      child: AnimatedContainer(
+                        duration: kTabScrollDuration,
+                        curve: Curves.ease,
+                        width: _indicatorWidth,
+                        height: widget.height -
+                            widget.indicatorPadding.vertical -
+                            additionalPadding.vertical,
+                        decoration: BoxDecoration(
+                          color: indicatorColor,
+                          borderRadius: BorderRadius.all(widget.radius),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              _SqueezeAnimated(
+                currentTilePadding: _currentTilePadding,
+                builder: (squeezePadding) => TweenAnimationBuilder<double>(
                   duration: kTabScrollDuration,
                   curve: Curves.ease,
-                  decoration: BoxDecoration(
-                    color: backgroundColor,
-                    borderRadius: borderRadius,
+                  tween: Tween<double>(
+                    begin: _indicatorWidth,
+                    end: _indicatorWidth,
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: _Labels(
+                  builder: (context, value, _) => ClipPath(
+                    clipper: RRectRevealClipper(
                       radius: widget.radius,
-                      splashColor: widget.splashColor,
-                      splashHighlightColor: widget.splashHighlightColor,
-                      callbackBuilder: _onTabTap(),
-                      availableSpace: constraints.maxWidth,
-                      tabs: widget.tabs,
-                      currentIndex: _internalIndex,
-                      textStyle: textStyle.copyWith(
-                        color: tabTextColor,
+                      size: Size(
+                        value,
+                        widget.height -
+                            widget.indicatorPadding.vertical -
+                            squeezePadding.vertical,
                       ),
+                      offset: Offset(_offset, 0),
                     ),
-                  ),
-                ),
-                Positioned(
-                  left: _offset,
-                  child: GestureDetector(
-                    onPanDown: _onPanDown(),
-                    onPanUpdate: _onPanUpdate(constraints),
-                    onPanEnd: _onPanEnd(constraints),
-                    child: _SqueezeAnimated(
-                      currentTilePadding: _currentTilePadding,
-                      builder: (additionalPadding) => Padding(
-                        padding: EdgeInsets.only(top: additionalPadding.top),
-                        child: AnimatedContainer(
-                          duration: kTabScrollDuration,
-                          curve: Curves.ease,
-                          width: indicatorWidth,
-                          height: widget.height -
-                              widget.indicatorPadding.vertical -
-                              additionalPadding.vertical,
-                          decoration: BoxDecoration(
-                            color: indicatorColor,
-                            borderRadius: BorderRadius.all(widget.radius),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                _SqueezeAnimated(
-                  currentTilePadding: _currentTilePadding,
-                  builder: (squeezePadding) => TweenAnimationBuilder<double>(
-                    duration: kTabScrollDuration,
-                    curve: Curves.ease,
-                    tween: Tween<double>(
-                      begin: indicatorWidth,
-                      end: indicatorWidth,
-                    ),
-                    builder: (context, value, _) => ClipPath(
-                      clipper: RRectRevealClipper(
+                    child: IgnorePointer(
+                      child: _Labels(
                         radius: widget.radius,
-                        size: Size(
-                          value,
-                          widget.height -
-                              widget.indicatorPadding.vertical -
-                              squeezePadding.vertical,
-                        ),
-                        offset: Offset(_offset, 0),
-                      ),
-                      child: IgnorePointer(
-                        child: _Labels(
-                          radius: widget.radius,
-                          splashColor: widget.splashColor,
-                          splashHighlightColor: widget.splashHighlightColor,
-                          availableSpace: constraints.maxWidth,
-                          tabs: widget.tabs,
-                          currentIndex: _internalIndex,
-                          textStyle: textStyle.copyWith(
-                            color: selectedTabTextColor,
-                          ),
+                        splashColor: widget.splashColor,
+                        splashHighlightColor: widget.splashHighlightColor,
+                        availableSpace: constraints.maxWidth,
+                        tabs: widget.tabs,
+                        currentIndex: _internalIndex,
+                        textStyle: textStyle.copyWith(
+                          color: selectedTabTextColor,
                         ),
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      }),
-    );
+        ),
+      );
+    });
   }
 
   VoidCallback Function(int)? _onTabTap() {
@@ -399,7 +397,7 @@ class _CustomizableTabBarState extends State<CustomizableTabBar>
 }
 
 class _Labels extends StatelessWidget {
-  _Labels({
+  const _Labels({
     Key? key,
     this.callbackBuilder,
     required this.availableSpace,
