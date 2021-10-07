@@ -1,5 +1,6 @@
-import 'package:customizable_tab_bar/utils/range.dart';
 import 'package:flutter/material.dart';
+
+import 'range.dart';
 
 class AnimationConverter {
   AnimationConverter({

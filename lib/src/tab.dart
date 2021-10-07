@@ -1,4 +1,5 @@
-part of customizable_tab_bar;
+import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 
 class CustomizableTab extends Equatable {
   const CustomizableTab({
