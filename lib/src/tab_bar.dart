@@ -153,6 +153,7 @@ class _SegmentedTabControlState extends State<SegmentedTabControl>
     _controller = newController;
     if (_controller != null) {
       _controller!.animation!.addListener(_handleTabControllerAnimationTick);
+      _handleTabControllerAnimationTick();
     }
   }
 
